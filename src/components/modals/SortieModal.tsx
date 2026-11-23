@@ -1,0 +1,165 @@
+import React, { useEffect, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
+import {
+  MOTIFS_SORTIE_LABELS,
+  MotifSortie,
+  SortieHorsVente,
+} from '../../types/elevage';
+import { getTodayISO } from '../../utils/format';
+import { BottomSheet } from '../BottomSheet';
+import { DateInput, StepperInput } from '../FormInputs';
+
+interface SortieModalProps {
+  open: boolean;
+  onClose: () => void;
+  bandeNom: string;
+  effectifVivantEstime: number;
+  initial?: SortieHorsVente | null;
+  onSave: (data: Omit<SortieHorsVente, 'id' | 'bandeId'>) => void;
+}
+
+const MOTIFS: MotifSortie[] = ['consommation', 'don', 'autre'];
+
+export function SortieModal({
+  open,
+  onClose,
+  bandeNom,
+  effectifVivantEstime,
+  initial,
+  onSave,
+}: SortieModalProps) {
+  const [motif, setMotif] = useState<MotifSortie>('consommation');
+  const [nombre, setNombre] = useState(1);
+  const [date, setDate] = useState(getTodayISO());
+  const [note, setNote] = useState('');
+  const [erreur, setErreur] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    setErreur('');
+    if (initial) {
+      setMotif(initial.motif);
+      setNombre(initial.nombre);
+      setDate(initial.date);
+      setNote(initial.note || '');
+    } else {
+      setMotif('consommation');
+      setNombre(1);
+      setDate(getTodayISO());
+      setNote('');
+    }
+  }, [open, initial]);
+
+  const maxDisponible = initial
+    ? effectifVivantEstime + initial.nombre
+    : effectifVivantEstime;
+  const depasseEffectif = nombre > maxDisponible;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (nombre <= 0) {
+      setErreur('Indiquez au moins 1 poulet sorti.');
+      return;
+    }
+    onSave({
+      date,
+      nombre,
+      motif,
+      note: note.trim() || undefined,
+    });
+    onClose();
+  };
+
+  return (
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      title={initial ? 'Modifier une sortie' : 'Don ou consommation'}
+      subtitle={bandeNom}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <span className="block text-base font-semibold text-slate-900 mb-2">
+            Motif de sortie
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {MOTIFS.map((m) => {
+              const active = motif === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMotif(m)}
+                  className={`min-h-[48px] px-3 rounded-xl border text-sm font-bold transition-colors ${
+                    active
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-800 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  {MOTIFS_SORTIE_LABELS[m]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <StepperInput
+          id="sortie-nombre"
+          label="Nombre de poulets"
+          value={nombre}
+          onChange={setNombre}
+          min={1}
+          step={1}
+          unit="poulets"
+        />
+
+        {depasseEffectif && (
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50 border border-amber-300 text-amber-950">
+            <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            <p className="text-sm font-medium leading-snug">
+              Attention : ce nombre ({nombre}) dépasse l’effectif vivant estimé
+              ({Math.max(0, maxDisponible)} poulets). Vous pouvez quand même enregistrer.
+            </p>
+          </div>
+        )}
+
+        <DateInput
+          id="sortie-date"
+          label="Date"
+          value={date}
+          onChange={setDate}
+        />
+
+        <div>
+          <label
+            htmlFor="sortie-note"
+            className="block text-base font-semibold text-slate-900 mb-1.5"
+          >
+            Note <span className="font-normal text-slate-500">(facultatif)</span>
+          </label>
+          <input
+            id="sortie-note"
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Ex : Don à la famille, repas..."
+            className="w-full min-h-[48px] px-3.5 rounded-xl border border-slate-300 bg-white text-base text-slate-950 focus:outline-none focus:ring-2 focus:ring-emerald-700"
+          />
+        </div>
+
+        {erreur && (
+          <p className="text-sm font-semibold text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
+            {erreur}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          className="w-full min-h-[52px] rounded-xl bg-slate-900 text-white font-bold text-base hover:bg-slate-800 active:bg-slate-950 transition-colors"
+        >
+          {initial ? 'Enregistrer les modifications' : 'Enregistrer la sortie'}
+        </button>
+      </form>
+    </BottomSheet>
+  );
+}

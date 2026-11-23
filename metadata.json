@@ -1,0 +1,6 @@
+{
+  "name": "Mon Élevage",
+  "description": "Application hors ligne de gestion d'élevage de poulets de chair : suivi des poulets, mortalités, ventes, aliment et rentabilité.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
