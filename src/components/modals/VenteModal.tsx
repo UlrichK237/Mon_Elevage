@@ -10,6 +10,7 @@ interface VenteModalProps {
   onClose: () => void;
   bandeNom: string;
   effectifVivantEstime: number;
+  defaultDate?: string;
   initial?: Vente | null;
   onSave: (data: Omit<Vente, 'id' | 'bandeId'>) => void;
 }
@@ -19,6 +20,7 @@ export function VenteModal({
   onClose,
   bandeNom,
   effectifVivantEstime,
+  defaultDate,
   initial,
   onSave,
 }: VenteModalProps) {
@@ -58,11 +60,11 @@ export function VenteModal({
       setMontantModifieManuellement(false);
       setMontantEncaisse(3000);
       setEncaisseSuitTotal(true);
-      setDate(getTodayISO());
+      setDate(defaultDate || getTodayISO());
       setClient('');
       setNote('');
     }
-  }, [open, initial]);
+  }, [open, initial, defaultDate]);
 
   const updateNombreOuPrix = (newNb: number, newPrix: number) => {
     setNombre(newNb);

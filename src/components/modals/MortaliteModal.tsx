@@ -14,6 +14,7 @@ interface MortaliteModalProps {
   onClose: () => void;
   bandeNom: string;
   effectifVivantEstime: number;
+  defaultDate?: string;
   initial?: Mortalite | null;
   onSave: (data: Omit<Mortalite, 'id' | 'bandeId'>) => void;
 }
@@ -31,6 +32,7 @@ export function MortaliteModal({
   onClose,
   bandeNom,
   effectifVivantEstime,
+  defaultDate,
   initial,
   onSave,
 }: MortaliteModalProps) {
@@ -50,11 +52,11 @@ export function MortaliteModal({
       setNote(initial.note || '');
     } else {
       setNombre(1);
-      setDate(getTodayISO());
+      setDate(defaultDate || getTodayISO());
       setCause('inconnue');
       setNote('');
     }
-  }, [open, initial]);
+  }, [open, initial, defaultDate]);
 
   const maxDisponible = initial
     ? effectifVivantEstime + initial.nombre

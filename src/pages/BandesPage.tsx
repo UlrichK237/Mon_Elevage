@@ -2,7 +2,12 @@ import React, { useMemo } from 'react';
 import { ChevronRight, Plus } from 'lucide-react';
 import { AppData } from '../types/elevage';
 import { calculerToutesBandes } from '../utils/calculs';
-import { formatDateFR, formatFCFA, formatNombre } from '../utils/format';
+import {
+  formatDateFR,
+  formatFCFA,
+  formatNombre,
+  formatPourcent,
+} from '../utils/format';
 
 interface BandesPageProps {
   data: AppData;
@@ -67,6 +72,10 @@ export function BandesPage({
           {calculsList.map((c) => {
             const isGain = c.resultat >= 0;
             const isClosed = c.bande.statut === 'cloturee';
+            const recupDepasse =
+              c.depensesRecupereesRatio !== null &&
+              c.depensesRecupereesRatio > 1;
+
             return (
               <button
                 key={c.bande.id}
@@ -90,17 +99,35 @@ export function BandesPage({
 
                 <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
                   <div>
-                    <p className="text-xs font-medium text-slate-500">
-                      {isGain ? 'GAIN' : 'PERTE'}{' '}
-                      {c.resultatEstProvisoire ? '(provisoire)' : ''}
-                    </p>
-                    <p
-                      className={`text-lg font-extrabold tabular-nums ${
-                        isGain ? 'text-emerald-800' : 'text-red-700'
-                      }`}
-                    >
-                      {formatFCFA(c.resultat)}
-                    </p>
+                    {isClosed ? (
+                      <>
+                        <p className="text-xs font-medium text-slate-500">
+                          {isGain ? 'GAIN' : 'PERTE'}
+                        </p>
+                        <p
+                          className={`text-lg font-extrabold tabular-nums ${
+                            isGain ? 'text-emerald-800' : 'text-red-700'
+                          }`}
+                        >
+                          {formatFCFA(c.resultat)}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs font-medium text-slate-500">
+                          Dépenses récupérées
+                        </p>
+                        <p
+                          className={`text-lg font-extrabold tabular-nums ${
+                            recupDepasse
+                              ? 'text-emerald-800'
+                              : 'text-amber-800'
+                          }`}
+                        >
+                          {formatPourcent(c.depensesRecupereesRatio, 0)}
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   <div>

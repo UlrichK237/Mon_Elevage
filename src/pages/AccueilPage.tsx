@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
+  Calendar,
   CheckCircle2,
   Gift,
   Plus,
@@ -22,6 +23,7 @@ import {
   formatNombre,
   getTodayISO,
 } from '../utils/format';
+import { BlocOuJenSuis } from '../components/BlocOuJenSuis';
 
 interface AccueilPageProps {
   data: AppData;
@@ -33,6 +35,7 @@ interface AccueilPageProps {
   onOpenDepense: (bandeId: string) => void;
   onOpenSortie: (bandeId: string) => void;
   onOpenDetail: (bandeId: string) => void;
+  onOpenCalendrier: (bandeId: string) => void;
   onOpenCloture: (bandeId: string) => void;
   onGoParametres: () => void;
   onLoadDemo: () => void;
@@ -48,6 +51,7 @@ export function AccueilPage({
   onOpenDepense,
   onOpenSortie,
   onOpenDetail,
+  onOpenCalendrier,
   onOpenCloture,
   onGoParametres,
   onLoadDemo,
@@ -90,7 +94,7 @@ export function AccueilPage({
       titre: string;
       detail: string;
       valeur: string;
-      tone: 'red' | 'green' | 'neutral';
+      tone: 'green' | 'neutral';
     }> = [];
 
     data.ventes
@@ -119,7 +123,7 @@ export function AccueilPage({
           }`,
           detail: m.cause ? CAUSES_MORTALITE_LABELS[m.cause] : 'Cause non précisée',
           valeur: `-${formatNombre(m.nombre)}`,
-          tone: 'red',
+          tone: 'neutral',
         });
       });
 
@@ -256,28 +260,40 @@ export function AccueilPage({
 
           {/* Carte principale de la bande en cours */}
           <section className="bg-white rounded-3xl border border-slate-200 p-5 md:p-6 shadow-sm space-y-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
                 <h2 className="text-xl font-extrabold text-slate-950">
                   {calculs.bande.nom}
                 </h2>
                 <p className="text-sm font-medium text-slate-600 mt-0.5">
-                  Jour {formatNombre(calculs.joursEcoules)} · Arrivée le{' '}
+                  Jour {formatNombre(calculs.joursEcoules)} sur{' '}
+                  {formatNombre(calculs.dureePrevueJours)} · Arrivée le{' '}
                   {formatDateFR(calculs.bande.dateArrivee)}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => onOpenDetail(calculs.bande.id)}
-                className="min-h-[44px] px-3.5 rounded-xl border border-slate-300 bg-slate-50 text-slate-900 font-bold text-sm flex items-center gap-1 hover:bg-slate-100 shrink-0"
-              >
-                <span>Détails</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onOpenCalendrier(calculs.bande.id)}
+                  aria-label="Ouvrir le calendrier de la bande"
+                  title="Calendrier de la bande"
+                  className="min-h-[48px] min-w-[48px] px-3 rounded-xl border border-slate-300 bg-slate-50 text-slate-900 flex items-center justify-center hover:bg-slate-100"
+                >
+                  <Calendar className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenDetail(calculs.bande.id)}
+                  className="min-h-[48px] px-3.5 rounded-xl border border-slate-300 bg-slate-50 text-slate-900 font-bold text-sm flex items-center gap-1 hover:bg-slate-100"
+                >
+                  <span>Détails</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            {/* Grille double : Vivants estimés + Résultat provisoire */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Grille : Vivants estimés + Bloc Où j'en suis */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
                 <p className="text-sm font-semibold text-slate-600">
                   Poulets vivants estimés
@@ -293,51 +309,16 @@ export function AccueilPage({
                 </p>
               </div>
 
-              <div
-                className={`p-4 rounded-2xl border ${
-                  calculs.resultat >= 0
-                    ? 'bg-emerald-50 border-emerald-200'
-                    : 'bg-red-50 border-red-200'
-                }`}
-              >
-                <p
-                  className={`text-sm font-bold ${
-                    calculs.resultat >= 0 ? 'text-emerald-900' : 'text-red-900'
-                  }`}
-                >
-                  {calculs.resultat >= 0 ? 'GAIN provisoire' : 'PERTE provisoire'}
-                </p>
-                <p
-                  className={`text-3xl sm:text-4xl font-extrabold tabular-nums mt-1 leading-tight ${
-                    calculs.resultat >= 0 ? 'text-emerald-800' : 'text-red-800'
-                  }`}
-                >
-                  {formatFCFA(calculs.resultat)}
-                </p>
-                <div className="mt-3 pt-2.5 border-t border-black/10 flex flex-wrap items-center justify-between gap-2 text-sm">
-                  <span className="text-slate-700 font-medium">
-                    Trésorerie (encaissé − charges) :
-                  </span>
-                  <span
-                    className={`font-bold tabular-nums ${
-                      calculs.resultatTresorerie >= 0
-                        ? 'text-emerald-900'
-                        : 'text-red-900'
-                    }`}
-                  >
-                    {formatFCFA(calculs.resultatTresorerie)}
-                  </span>
-                </div>
-              </div>
+              <BlocOuJenSuis calculs={calculs} />
             </div>
 
-            {calculs.prixMinimumCouvrirCharges !== null && (
-              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950">
+            {calculs.prixMinimumCouvrirDepenses !== null && (
+              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950">
                 <p className="text-sm font-bold">
-                  Prix minimum pour couvrir vos charges sur les{' '}
+                  Prix minimum pour couvrir vos dépenses sur les{' '}
                   {formatNombre(calculs.effectifVivantEstime)} poulets restants :{' '}
                   <span className="text-base underline decoration-2 tabular-nums">
-                    {formatFCFA(calculs.prixMinimumCouvrirCharges)} / poulet
+                    {formatFCFA(calculs.prixMinimumCouvrirDepenses)} / poulet
                   </span>
                 </p>
               </div>
@@ -436,11 +417,7 @@ export function AccueilPage({
                     </div>
                     <span
                       className={`text-base font-bold tabular-nums shrink-0 ${
-                        m.tone === 'green'
-                          ? 'text-emerald-800'
-                          : m.tone === 'red'
-                          ? 'text-red-700'
-                          : 'text-slate-900'
+                        m.tone === 'green' ? 'text-emerald-800' : 'text-slate-900'
                       }`}
                     >
                       {m.valeur}

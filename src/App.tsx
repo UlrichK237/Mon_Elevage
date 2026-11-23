@@ -11,7 +11,9 @@ import {
   AppData,
   AppPage,
   Bande,
+  BandeDetailTab,
   CategorieDepense,
+  ComptageControle,
   Depense,
   Mortalite,
   SortieHorsVente,
@@ -29,7 +31,7 @@ import {
   calculerBande,
   calculerCreancesParClient,
 } from './utils/calculs';
-import { formatFCFA, generateId, getTodayISO } from './utils/format';
+import { formatDateFR, formatFCFA, generateId, getTodayISO } from './utils/format';
 import { AccueilPage } from './pages/AccueilPage';
 import { BandesPage } from './pages/BandesPage';
 import { BandeDetailPage } from './pages/BandeDetailPage';
@@ -43,14 +45,23 @@ import { DepenseModal } from './components/modals/DepenseModal';
 import { SortieModal } from './components/modals/SortieModal';
 import { ClotureModal } from './components/modals/ClotureModal';
 import { PaiementDetteModal } from './components/modals/PaiementDetteModal';
+import { ComptageModal } from './components/modals/ComptageModal';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { UndoToast } from './components/UndoToast';
 
-function parseHash(): { page: AppPage; bandeId: string | null } {
+function parseHash(): {
+  page: AppPage;
+  bandeId: string | null;
+  tab: BandeDetailTab;
+} {
   const raw = window.location.hash.replace(/^#\/?/, '');
   if (raw.startsWith('bande/')) {
-    const id = decodeURIComponent(raw.slice('bande/'.length));
-    if (id) return { page: 'bande_detail', bandeId: id };
+    const rest = raw.slice('bande/'.length);
+    const [rawId, rawTab] = rest.split('/');
+    const id = rawId ? decodeURIComponent(rawId) : '';
+    const tab: BandeDetailTab =
+      rawTab === 'calendrier' ? 'calendrier' : 'resume';
+    if (id) return { page: 'bande_detail', bandeId: id, tab };
   }
   if (
     raw === 'bandes' ||
@@ -58,9 +69,9 @@ function parseHash(): { page: AppPage; bandeId: string | null } {
     raw === 'bilan' ||
     raw === 'parametres'
   ) {
-    return { page: raw, bandeId: null };
+    return { page: raw, bandeId: null, tab: 'resume' };
   }
-  return { page: 'accueil', bandeId: null };
+  return { page: 'accueil', bandeId: null, tab: 'resume' };
 }
 
 export default function App() {
@@ -69,6 +80,9 @@ export default function App() {
   const [page, setPage] = useState<AppPage>(initialRoute.page);
   const [detailBandeId, setDetailBandeId] = useState<string | null>(
     initialRoute.bandeId
+  );
+  const [detailInitialTab, setDetailInitialTab] = useState<BandeDetailTab>(
+    initialRoute.tab
   );
   const [selectedActiveBandeId, setSelectedActiveBandeId] = useState<
     string | null
@@ -81,12 +95,14 @@ export default function App() {
   const [mortModal, setMortModal] = useState<{
     open: boolean;
     bandeId: string | null;
+    defaultDate?: string;
     initial: Mortalite | null;
   }>({ open: false, bandeId: null, initial: null });
 
   const [venteModal, setVenteModal] = useState<{
     open: boolean;
     bandeId: string | null;
+    defaultDate?: string;
     initial: Vente | null;
   }>({ open: false, bandeId: null, initial: null });
 
@@ -94,6 +110,7 @@ export default function App() {
     open: boolean;
     bandeId: string | null;
     defaultCategorie: CategorieDepense;
+    defaultDate?: string;
     initial: Depense | null;
   }>({
     open: false,
@@ -105,8 +122,25 @@ export default function App() {
   const [sortieModal, setSortieModal] = useState<{
     open: boolean;
     bandeId: string | null;
+    defaultDate?: string;
     initial: SortieHorsVente | null;
   }>({ open: false, bandeId: null, initial: null });
+
+  const [comptageModal, setComptageModal] = useState<{
+    open: boolean;
+    bandeId: string | null;
+    dateISO: string;
+    vivantsEstimesFinJour: number;
+    avantArrivee: boolean;
+    initial: ComptageControle | null;
+  }>({
+    open: false,
+    bandeId: null,
+    dateISO: getTodayISO(),
+    vivantsEstimesFinJour: 0,
+    avantArrivee: false,
+    initial: null,
+  });
 
   const [clotureBandeId, setClotureBandeId] = useState<string | null>(null);
   const [paiementDetteTarget, setPaiementDetteTarget] =
@@ -142,23 +176,34 @@ export default function App() {
       const next = parseHash();
       setPage(next.page);
       setDetailBandeId(next.bandeId);
+      setDetailInitialTab(next.tab);
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
-  const navigate = useCallback((nextPage: AppPage, bandeId?: string) => {
-    if (nextPage === 'bande_detail' && bandeId) {
-      window.location.hash = `#bande/${encodeURIComponent(bandeId)}`;
-      setDetailBandeId(bandeId);
-      setPage('bande_detail');
-    } else {
-      window.location.hash = `#${nextPage}`;
-      setDetailBandeId(null);
-      setPage(nextPage);
-    }
-    window.scrollTo({ top: 0, behavior: 'auto' });
-  }, []);
+  const navigate = useCallback(
+    (
+      nextPage: AppPage,
+      bandeId?: string,
+      tab: BandeDetailTab = 'resume'
+    ) => {
+      if (nextPage === 'bande_detail' && bandeId) {
+        const suffix = tab === 'calendrier' ? '/calendrier' : '';
+        window.location.hash = `#bande/${encodeURIComponent(bandeId)}${suffix}`;
+        setDetailBandeId(bandeId);
+        setDetailInitialTab(tab);
+        setPage('bande_detail');
+      } else {
+        window.location.hash = `#${nextPage}`;
+        setDetailBandeId(null);
+        setDetailInitialTab('resume');
+        setPage(nextPage);
+      }
+      window.scrollTo({ top: 0, behavior: 'auto' });
+    },
+    []
+  );
 
   const triggerUndo = useCallback((message: string, undoFn: () => void) => {
     setUndoAction({
@@ -168,7 +213,6 @@ export default function App() {
     });
   }, []);
 
-  // Calcul rapide pour le contexte d'une bande ouverte en modale
   const getBandeCalculs = useCallback(
     (bandeId: string | null) => {
       if (!bandeId) return null;
@@ -186,7 +230,6 @@ export default function App() {
     [data]
   );
 
-  // Compteur de creances pour l'onglet
   const { totalCreances } = useMemo(
     () => calculerCreancesParClient(data),
     [data]
@@ -445,6 +488,71 @@ export default function App() {
     });
   };
 
+  // --- CRUD Comptage de controle ---
+  const handleSaveComptage = (nombreCompte: number) => {
+    const bandeId = comptageModal.bandeId;
+    const date = comptageModal.dateISO;
+    if (!bandeId) return;
+
+    if (comptageModal.initial) {
+      const targetId = comptageModal.initial.id;
+      setData((prev) => ({
+        ...prev,
+        comptagesControle: prev.comptagesControle.map((c) =>
+          c.id === targetId ? { ...c, nombreCompte } : c
+        ),
+      }));
+    } else {
+      const newItem: ComptageControle = {
+        id: generateId('compt'),
+        bandeId,
+        date,
+        nombreCompte,
+      };
+      setData((prev) => ({
+        ...prev,
+        comptagesControle: [
+          newItem,
+          ...prev.comptagesControle.filter(
+            (c) => !(c.bandeId === bandeId && c.date === date)
+          ),
+        ],
+      }));
+      triggerUndo(
+        `Comptage du ${formatDateFR(date)} enregistré (${nombreCompte} poulets).`,
+        () => {
+          setData((prev) => ({
+            ...prev,
+            comptagesControle: prev.comptagesControle.filter(
+              (c) => c.id !== newItem.id
+            ),
+          }));
+        }
+      );
+    }
+  };
+
+  const handleDeleteComptage = (comptage: ComptageControle) => {
+    setConfirmState({
+      open: true,
+      title: 'Supprimer ce comptage ?',
+      message: `Voulez-vous supprimer le comptage de contrôle du ${formatDateFR(
+        comptage.date
+      )} ?`,
+      confirmLabel: 'Supprimer',
+      danger: true,
+      onConfirm: () => {
+        setData((prev) => ({
+          ...prev,
+          comptagesControle: prev.comptagesControle.filter(
+            (c) => c.id !== comptage.id
+          ),
+        }));
+        setConfirmState((s) => ({ ...s, open: false }));
+      },
+    });
+  };
+
   // --- Cloture & Reouverture ---
   const handleConfirmCloture = (payload: {
     dateCloture: string;
@@ -466,7 +574,7 @@ export default function App() {
           : b
       ),
     }));
-    navigate('bande_detail', clotureBandeId);
+    navigate('bande_detail', clotureBandeId, 'resume');
     setClotureBandeId(null);
   };
 
@@ -593,6 +701,7 @@ export default function App() {
   const venteCalculs = getBandeCalculs(venteModal.bandeId);
   const depenseCalculs = getBandeCalculs(depenseModal.bandeId);
   const sortieCalculs = getBandeCalculs(sortieModal.bandeId);
+  const comptageCalculs = getBandeCalculs(comptageModal.bandeId);
   const clotureCalculs = getBandeCalculs(clotureBandeId);
 
   const navItems: Array<{
@@ -691,7 +800,12 @@ export default function App() {
             onOpenSortie={(bandeId) =>
               setSortieModal({ open: true, bandeId, initial: null })
             }
-            onOpenDetail={(bandeId) => navigate('bande_detail', bandeId)}
+            onOpenDetail={(bandeId) =>
+              navigate('bande_detail', bandeId, 'resume')
+            }
+            onOpenCalendrier={(bandeId) =>
+              navigate('bande_detail', bandeId, 'calendrier')
+            }
             onOpenCloture={(bandeId) => setClotureBandeId(bandeId)}
             onGoParametres={() => navigate('parametres')}
             onLoadDemo={handleLoadDemo}
@@ -705,15 +819,18 @@ export default function App() {
               setEditingBande(null);
               setBandeModalOpen(true);
             }}
-            onOpenDetail={(bandeId) => navigate('bande_detail', bandeId)}
+            onOpenDetail={(bandeId) =>
+              navigate('bande_detail', bandeId, 'resume')
+            }
           />
         )}
 
-        {page === 'bande_detail' && (
-          detailBande ? (
+        {page === 'bande_detail' &&
+          (detailBande ? (
             <BandeDetailPage
               bande={detailBande}
               data={data}
+              initialTab={detailInitialTab}
               onBack={() => navigate('bandes')}
               onEditBande={(b) => {
                 setEditingBande(b);
@@ -721,25 +838,46 @@ export default function App() {
               }}
               onOpenCloture={() => setClotureBandeId(detailBande.id)}
               onReouvrirBande={() => handleReouvrirBande(detailBande)}
-              onAddVente={() =>
-                setVenteModal({ open: true, bandeId: detailBande.id, initial: null })
+              onAddVente={(dateISO) =>
+                setVenteModal({
+                  open: true,
+                  bandeId: detailBande.id,
+                  defaultDate: dateISO,
+                  initial: null,
+                })
               }
               onEditVente={(v) =>
-                setVenteModal({ open: true, bandeId: detailBande.id, initial: v })
+                setVenteModal({
+                  open: true,
+                  bandeId: detailBande.id,
+                  initial: v,
+                })
               }
               onDeleteVente={handleDeleteVente}
-              onAddMort={() =>
-                setMortModal({ open: true, bandeId: detailBande.id, initial: null })
+              onAddMort={(dateISO) =>
+                setMortModal({
+                  open: true,
+                  bandeId: detailBande.id,
+                  defaultDate: dateISO,
+                  initial: null,
+                })
               }
               onEditMort={(m) =>
-                setMortModal({ open: true, bandeId: detailBande.id, initial: m })
+                setMortModal({
+                  open: true,
+                  bandeId: detailBande.id,
+                  initial: m,
+                })
               }
               onDeleteMort={handleDeleteMort}
-              onAddDepense={(isAliment) =>
+              onAddDepense={(isAliment, dateISO) =>
                 setDepenseModal({
                   open: true,
                   bandeId: detailBande.id,
-                  defaultCategorie: isAliment ? 'aliment' : 'medicaments_vaccins',
+                  defaultCategorie: isAliment
+                    ? 'aliment'
+                    : 'medicaments_vaccins',
+                  defaultDate: dateISO,
                   initial: null,
                 })
               }
@@ -752,13 +890,37 @@ export default function App() {
                 })
               }
               onDeleteDepense={handleDeleteDepense}
-              onAddSortie={() =>
-                setSortieModal({ open: true, bandeId: detailBande.id, initial: null })
+              onAddSortie={(dateISO) =>
+                setSortieModal({
+                  open: true,
+                  bandeId: detailBande.id,
+                  defaultDate: dateISO,
+                  initial: null,
+                })
               }
               onEditSortie={(s) =>
-                setSortieModal({ open: true, bandeId: detailBande.id, initial: s })
+                setSortieModal({
+                  open: true,
+                  bandeId: detailBande.id,
+                  initial: s,
+                })
               }
               onDeleteSortie={handleDeleteSortie}
+              onOpenComptage={(
+                dateISO,
+                vivantsEstimesFinJour,
+                avantArrivee,
+                existing
+              ) =>
+                setComptageModal({
+                  open: true,
+                  bandeId: detailBande.id,
+                  dateISO,
+                  vivantsEstimesFinJour,
+                  avantArrivee,
+                  initial: existing,
+                })
+              }
             />
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200 p-6 text-center space-y-3">
@@ -773,8 +935,7 @@ export default function App() {
                 Retour à la liste des bandes
               </button>
             </div>
-          )
-        )}
+          ))}
 
         {page === 'creances' && (
           <CreancesPage
@@ -786,7 +947,9 @@ export default function App() {
         {page === 'bilan' && (
           <BilanGlobalPage
             data={data}
-            onOpenDetail={(bandeId) => navigate('bande_detail', bandeId)}
+            onOpenDetail={(bandeId) =>
+              navigate('bande_detail', bandeId, 'resume')
+            }
           />
         )}
 
@@ -803,7 +966,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Barre de navigation fixe en bas sur mobile (1 seule barre fixe <= 15% hauteur) */}
+      {/* Barre de navigation fixe en bas sur mobile */}
       <nav
         aria-label="Menu mobile"
         className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 pb-safe shadow-lg"
@@ -849,9 +1012,12 @@ export default function App() {
 
       <MortaliteModal
         open={mortModal.open}
-        onClose={() => setMortModal({ open: false, bandeId: null, initial: null })}
+        onClose={() =>
+          setMortModal({ open: false, bandeId: null, initial: null })
+        }
         bandeNom={mortCalculs?.bande.nom || ''}
         effectifVivantEstime={mortCalculs?.effectifVivantEstime ?? 0}
+        defaultDate={mortModal.defaultDate}
         initial={mortModal.initial}
         onSave={handleSaveMort}
       />
@@ -863,6 +1029,7 @@ export default function App() {
         }
         bandeNom={venteCalculs?.bande.nom || ''}
         effectifVivantEstime={venteCalculs?.effectifVivantEstime ?? 0}
+        defaultDate={venteModal.defaultDate}
         initial={venteModal.initial}
         onSave={handleSaveVente}
       />
@@ -879,6 +1046,7 @@ export default function App() {
         }
         bandeNom={depenseCalculs?.bande.nom || ''}
         defaultCategorie={depenseModal.defaultCategorie}
+        defaultDate={depenseModal.defaultDate}
         initial={depenseModal.initial}
         onSave={handleSaveDepense}
       />
@@ -890,8 +1058,23 @@ export default function App() {
         }
         bandeNom={sortieCalculs?.bande.nom || ''}
         effectifVivantEstime={sortieCalculs?.effectifVivantEstime ?? 0}
+        defaultDate={sortieModal.defaultDate}
         initial={sortieModal.initial}
         onSave={handleSaveSortie}
+      />
+
+      <ComptageModal
+        open={comptageModal.open}
+        onClose={() =>
+          setComptageModal((s) => ({ ...s, open: false, initial: null }))
+        }
+        bandeNom={comptageCalculs?.bande.nom || ''}
+        dateISO={comptageModal.dateISO}
+        vivantsEstimesCeJour={comptageModal.vivantsEstimesFinJour}
+        avantArrivee={comptageModal.avantArrivee}
+        initial={comptageModal.initial}
+        onSave={handleSaveComptage}
+        onDelete={handleDeleteComptage}
       />
 
       {clotureCalculs && (

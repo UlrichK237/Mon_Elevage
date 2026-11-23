@@ -131,7 +131,7 @@ export function ClotureModal({
           unit="sacs"
           helperText={`Sur ${formatNombre(
             calculs.sacsAchetes
-          )} sacs achetés. Les sacs restants ne sont pas comptés dans les charges de cette bande.`}
+          )} sacs achetés. Les sacs restants ne sont pas comptés dans les dépenses de cette bande.`}
         />
 
         <DateInput

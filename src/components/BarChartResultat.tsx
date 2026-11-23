@@ -7,23 +7,29 @@ interface BarChartResultatProps {
 }
 
 export function BarChartResultat({ bandes }: BarChartResultatProps) {
-  if (bandes.length === 0) return null;
+  const cloturees = bandes.filter((b) => b.bande.statut === 'cloturee');
+
+  if (cloturees.length === 0) {
+    return (
+      <p className="text-sm text-slate-600 py-4">
+        Le graphique affichera le résultat (vert pour un gain, rouge pour une perte) dès que vous aurez clôturé au moins une bande.
+      </p>
+    );
+  }
 
   const maxAbs = Math.max(
     1,
-    ...bandes.map((b) => Math.abs(b.resultat))
+    ...cloturees.map((b) => Math.abs(b.resultat))
   );
 
-  // Chart geometry in SVG viewBox coordinates
-  const width = Math.max(320, bandes.length * 82 + 40);
+  const width = Math.max(320, cloturees.length * 86 + 40);
   const height = 220;
   const topPad = 28;
   const bottomPad = 48;
   const plotHeight = height - topPad - bottomPad;
-  const hasNegatives = bandes.some((b) => b.resultat < 0);
-  const hasPositives = bandes.some((b) => b.resultat > 0);
+  const hasNegatives = cloturees.some((b) => b.resultat < 0);
+  const hasPositives = cloturees.some((b) => b.resultat > 0);
 
-  // Zero line Y position
   const zeroY =
     hasNegatives && hasPositives
       ? topPad + plotHeight * 0.55
@@ -34,7 +40,7 @@ export function BarChartResultat({ bandes }: BarChartResultatProps) {
   const maxPosSpace = zeroY - topPad;
   const maxNegSpace = topPad + plotHeight - zeroY;
 
-  const barAreaWidth = (width - 32) / bandes.length;
+  const barAreaWidth = (width - 32) / cloturees.length;
   const barWidth = Math.min(44, Math.max(24, barAreaWidth * 0.55));
 
   return (
@@ -43,9 +49,8 @@ export function BarChartResultat({ bandes }: BarChartResultatProps) {
         viewBox={`0 0 ${width} ${height}`}
         className="w-full min-w-[300px] h-auto select-none"
         role="img"
-        aria-label="Graphique du résultat financier par bande"
+        aria-label="Graphique du résultat financier des bandes clôturées"
       >
-        {/* Zero baseline */}
         <line
           x1={16}
           y1={zeroY}
@@ -55,7 +60,7 @@ export function BarChartResultat({ bandes }: BarChartResultatProps) {
           strokeWidth={1.5}
         />
 
-        {bandes.map((item, index) => {
+        {cloturees.map((item, index) => {
           const isPositive = item.resultat >= 0;
           const ratio = Math.abs(item.resultat) / maxAbs;
           const barHeight = Math.max(
@@ -67,8 +72,8 @@ export function BarChartResultat({ bandes }: BarChartResultatProps) {
           const y = isPositive ? zeroY - barHeight : zeroY;
           const fill = isPositive ? '#15803D' : '#B91C1C';
           const shortName =
-            item.bande.nom.length > 11
-              ? item.bande.nom.slice(0, 10) + '…'
+            item.bande.nom.length > 12
+              ? item.bande.nom.slice(0, 11) + '…'
               : item.bande.nom;
 
           const labelAmount =
@@ -94,7 +99,6 @@ export function BarChartResultat({ bandes }: BarChartResultatProps) {
                 height={barHeight}
                 rx={6}
                 fill={fill}
-                opacity={item.resultatEstProvisoire ? 0.78 : 1}
               />
               <text
                 x={centerX}
@@ -123,7 +127,7 @@ export function BarChartResultat({ bandes }: BarChartResultatProps) {
                 fontSize={10}
                 fill="#64748B"
               >
-                {item.resultatEstProvisoire ? 'En cours' : 'Clôturée'}
+                Clôturée
               </text>
             </g>
           );

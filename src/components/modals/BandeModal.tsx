@@ -14,8 +14,10 @@ interface BandeModalProps {
 export function BandeModal({ open, onClose, initial, onSave }: BandeModalProps) {
   const [nom, setNom] = useState('');
   const [dateArrivee, setDateArrivee] = useState(getTodayISO());
+  const [dureePrevueJours, setDureePrevueJours] = useState(28);
   const [nbRecus, setNbRecus] = useState(500);
   const [coutAchatTotal, setCoutAchatTotal] = useState(275000);
+  const [prixVentePrevu, setPrixVentePrevu] = useState(0);
   const [fournisseur, setFournisseur] = useState('');
   const [notes, setNotes] = useState('');
   const [erreur, setErreur] = useState('');
@@ -26,8 +28,10 @@ export function BandeModal({ open, onClose, initial, onSave }: BandeModalProps) 
     if (initial) {
       setNom(initial.nom);
       setDateArrivee(initial.dateArrivee);
+      setDureePrevueJours(initial.dureePrevueJours || 28);
       setNbRecus(initial.nbRecus);
       setCoutAchatTotal(initial.coutAchatTotal);
+      setPrixVentePrevu(initial.prixVentePrevu || 0);
       setFournisseur(initial.fournisseur || '');
       setNotes(initial.notes || '');
     } else {
@@ -35,8 +39,10 @@ export function BandeModal({ open, onClose, initial, onSave }: BandeModalProps) 
       const mois = now.toLocaleDateString('fr-FR', { month: 'long' });
       setNom(`Bande ${mois}`);
       setDateArrivee(getTodayISO());
+      setDureePrevueJours(28);
       setNbRecus(500);
       setCoutAchatTotal(275000);
+      setPrixVentePrevu(3000);
       setFournisseur('');
       setNotes('');
     }
@@ -52,11 +58,17 @@ export function BandeModal({ open, onClose, initial, onSave }: BandeModalProps) 
       setErreur('Le nombre de poussins reçus doit être supérieur à zéro.');
       return;
     }
+    if (dureePrevueJours <= 0) {
+      setErreur('La durée prévue doit être d’au moins 1 jour.');
+      return;
+    }
     onSave({
       nom: nom.trim(),
       dateArrivee,
+      dureePrevueJours,
       nbRecus,
       coutAchatTotal,
+      prixVentePrevu: prixVentePrevu > 0 ? prixVentePrevu : undefined,
       fournisseur: fournisseur.trim() || undefined,
       notes: notes.trim() || undefined,
     });
@@ -96,6 +108,17 @@ export function BandeModal({ open, onClose, initial, onSave }: BandeModalProps) 
         />
 
         <StepperInput
+          id="bande-duree"
+          label="Durée prévue d’élevage"
+          value={dureePrevueJours}
+          onChange={setDureePrevueJours}
+          min={1}
+          step={1}
+          unit="jours"
+          helperText="Par défaut 28 jours (4 semaines)."
+        />
+
+        <StepperInput
           id="bande-nb"
           label="Nombre de poussins reçus"
           value={nbRecus}
@@ -111,6 +134,15 @@ export function BandeModal({ open, onClose, initial, onSave }: BandeModalProps) 
           value={coutAchatTotal}
           onChange={setCoutAchatTotal}
           step={5000}
+        />
+
+        <MontantInput
+          id="bande-prix-prevu"
+          label="Prix de vente prévu par poulet (facultatif)"
+          value={prixVentePrevu}
+          onChange={setPrixVentePrevu}
+          step={100}
+          helperText="Sert uniquement pour estimer vos futures ventes avant les premières ventes."
         />
 
         <div>

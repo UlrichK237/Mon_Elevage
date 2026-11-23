@@ -25,12 +25,14 @@ export type CategorieDepense =
 export interface Bande {
   id: string;
   nom: string;
-  dateArrivee: string; // Format ISO YYYY-MM-DD
+  dateArrivee: string; // Format ISO AAAA-MM-JJ
+  dureePrevueJours: number; // Défaut 28
   nbRecus: number;
   coutAchatTotal: number;
+  prixVentePrevu?: number; // FCFA par poulet (facultatif)
   fournisseur?: string;
   statut: StatutBande;
-  dateCloture?: string; // Format ISO YYYY-MM-DD
+  dateCloture?: string; // Format ISO AAAA-MM-JJ
   nbCompteFinal?: number;
   sacsRestantsFinal?: number;
   notes?: string;
@@ -39,7 +41,7 @@ export interface Bande {
 export interface Mortalite {
   id: string;
   bandeId: string;
-  date: string; // YYYY-MM-DD
+  date: string; // AAAA-MM-JJ
   nombre: number;
   cause?: CauseMortalite;
   note?: string;
@@ -48,7 +50,7 @@ export interface Mortalite {
 export interface Vente {
   id: string;
   bandeId: string;
-  date: string; // YYYY-MM-DD
+  date: string; // AAAA-MM-JJ
   type: TypeVente;
   nombre: number;
   prixUnitaire: number;
@@ -61,7 +63,7 @@ export interface Vente {
 export interface PaiementDette {
   id: string;
   venteId: string;
-  date: string; // YYYY-MM-DD
+  date: string; // AAAA-MM-JJ
   montant: number;
   note?: string;
 }
@@ -69,7 +71,7 @@ export interface PaiementDette {
 export interface SortieHorsVente {
   id: string;
   bandeId: string;
-  date: string; // YYYY-MM-DD
+  date: string; // AAAA-MM-JJ
   nombre: number;
   motif: MotifSortie;
   note?: string;
@@ -78,7 +80,7 @@ export interface SortieHorsVente {
 export interface Depense {
   id: string;
   bandeId: string;
-  date: string; // YYYY-MM-DD
+  date: string; // AAAA-MM-JJ
   categorie: CategorieDepense;
   montant: number;
   nbSacs?: number;
@@ -86,18 +88,26 @@ export interface Depense {
   note?: string;
 }
 
+export interface ComptageControle {
+  id: string;
+  bandeId: string;
+  date: string; // AAAA-MM-JJ
+  nombreCompte: number;
+}
+
 export interface AppData {
   schemaVersion: number;
-  lastBackupDate?: string; // YYYY-MM-DD
+  lastBackupDate?: string; // AAAA-MM-JJ
   bandes: Bande[];
   mortalites: Mortalite[];
   ventes: Vente[];
   paiementsDette: PaiementDette[];
   sortiesHorsVente: SortieHorsVente[];
   depenses: Depense[];
+  comptagesControle: ComptageControle[];
 }
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const CAUSES_MORTALITE_LABELS: Record<CauseMortalite, string> = {
   maladie: 'Maladie',
@@ -132,6 +142,14 @@ export type AppPage =
   | 'creances'
   | 'bilan'
   | 'parametres';
+
+export type BandeDetailTab =
+  | 'resume'
+  | 'calendrier'
+  | 'ventes'
+  | 'mortalite'
+  | 'depenses'
+  | 'aliment';
 
 export interface UndoAction {
   id: string;

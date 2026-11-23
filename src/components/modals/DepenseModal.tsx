@@ -13,6 +13,7 @@ interface DepenseModalProps {
   onClose: () => void;
   bandeNom: string;
   defaultCategorie?: CategorieDepense;
+  defaultDate?: string;
   initial?: Depense | null;
   onSave: (data: Omit<Depense, 'id' | 'bandeId'>) => void;
 }
@@ -34,6 +35,7 @@ export function DepenseModal({
   onClose,
   bandeNom,
   defaultCategorie = 'aliment',
+  defaultDate,
   initial,
   onSave,
 }: DepenseModalProps) {
@@ -60,10 +62,10 @@ export function DepenseModal({
       setNbSacs(5);
       setPrixParSac(18000);
       setMontant(defaultCategorie === 'aliment' ? 5 * 18000 : 5000);
-      setDate(getTodayISO());
+      setDate(defaultDate || getTodayISO());
       setNote('');
     }
-  }, [open, initial, defaultCategorie]);
+  }, [open, initial, defaultCategorie, defaultDate]);
 
   const isAliment = categorie === 'aliment';
   const montantFinal = isAliment ? nbSacs * prixParSac : montant;

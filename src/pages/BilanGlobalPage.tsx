@@ -36,7 +36,7 @@ export function BilanGlobalPage({ data, onOpenDetail }: BilanGlobalPageProps) {
           Tableau de bord global
         </h1>
         <p className="text-sm text-slate-600">
-          Vue d’ensemble et comparaison de toutes vos bandes
+          Les totaux cumulés comptent uniquement les bandes clôturées.
         </p>
       </header>
 
@@ -48,65 +48,84 @@ export function BilanGlobalPage({ data, onOpenDetail }: BilanGlobalPageProps) {
         </section>
       ) : (
         <>
-          {/* Totaux globaux */}
+          {/* Totaux globaux (bandes clôturées uniquement) */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div
               className={`rounded-2xl border p-4 ${
-                totaux.totalResultat >= 0
+                totaux.nbBandesCloturees === 0
+                  ? 'bg-white border-slate-200'
+                  : totaux.totalResultat >= 0
                   ? 'bg-emerald-50 border-emerald-200'
                   : 'bg-red-50 border-red-200'
               }`}
             >
               <p className="text-xs font-bold text-slate-700">
-                {totaux.totalResultat >= 0 ? 'GAIN CUMULÉ' : 'PERTE CUMULÉE'}
+                {totaux.nbBandesCloturees === 0
+                  ? 'RÉSULTAT CUMULÉ (CLÔTURÉES)'
+                  : totaux.totalResultat >= 0
+                  ? 'GAIN CUMULÉ (CLÔTURÉES)'
+                  : 'PERTE CUMULÉE (CLÔTURÉES)'}
               </p>
               <p
                 className={`text-2xl font-extrabold tabular-nums mt-1 ${
-                  totaux.totalResultat >= 0 ? 'text-emerald-800' : 'text-red-700'
+                  totaux.nbBandesCloturees === 0
+                    ? 'text-slate-950'
+                    : totaux.totalResultat >= 0
+                    ? 'text-emerald-800'
+                    : 'text-red-700'
                 }`}
               >
-                {formatFCFA(totaux.totalResultat)}
+                {totaux.nbBandesCloturees === 0
+                  ? '-'
+                  : formatFCFA(totaux.totalResultat)}
               </p>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 p-4">
               <p className="text-xs font-semibold text-slate-600">
-                Chiffre d’affaires total
+                Chiffre d’affaires (clôturées)
               </p>
               <p className="text-2xl font-extrabold text-slate-950 tabular-nums mt-1">
-                {formatFCFA(totaux.totalChiffreAffaires)}
+                {totaux.nbBandesCloturees === 0
+                  ? '-'
+                  : formatFCFA(totaux.totalChiffreAffaires)}
               </p>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 p-4">
               <p className="text-xs font-semibold text-slate-600">
-                Créances en cours
+                Créances en cours (toutes bandes)
               </p>
               <p
                 className={`text-2xl font-extrabold tabular-nums mt-1 ${
-                  totaux.totalCreances > 0 ? 'text-amber-800' : 'text-slate-950'
+                  totaux.totalCreancesEnCoursToutesBandes > 0
+                    ? 'text-amber-800'
+                    : 'text-slate-950'
                 }`}
               >
-                {formatFCFA(totaux.totalCreances)}
+                {formatFCFA(totaux.totalCreancesEnCoursToutesBandes)}
               </p>
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 p-4">
               <p className="text-xs font-semibold text-slate-600">
-                Poulets vendus / reçus
+                Poulets vendus / reçus (clôturées)
               </p>
               <p className="text-2xl font-extrabold text-slate-950 tabular-nums mt-1">
-                {formatNombre(totaux.totalPouletsVendus)} /{' '}
-                {formatNombre(totaux.totalPouletsRecus)}
+                {totaux.nbBandesCloturees === 0
+                  ? '-'
+                  : `${formatNombre(totaux.totalPouletsVendus)} / ${formatNombre(
+                      totaux.totalPouletsRecus
+                    )}`}
               </p>
             </div>
           </section>
 
-          {/* Graphique en barres */}
+          {/* Graphique en barres (bandes clôturées) */}
           <section className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-lg font-bold text-slate-950">
-                Résultat par bande (FCFA)
+                Résultat des bandes clôturées (FCFA)
               </h2>
               <p className="text-xs font-semibold text-slate-600">
                 Vert : GAIN · Rouge : PERTE
@@ -124,11 +143,13 @@ export function BilanGlobalPage({ data, onOpenDetail }: BilanGlobalPageProps) {
               Touchez une bande pour ouvrir son détail complet.
             </p>
             <div className="overflow-x-auto -mx-2 px-2">
-              <table className="w-full min-w-[640px] text-left border-collapse">
+              <table className="w-full min-w-[660px] text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 text-xs font-bold text-slate-600">
                     <th className="py-3 pr-3">Bande</th>
-                    <th className="py-3 px-3 text-right">Résultat</th>
+                    <th className="py-3 px-3 text-right">
+                      Résultat / Récupéré
+                    </th>
                     <th className="py-3 px-3 text-right">Marge / poulet</th>
                     <th className="py-3 px-3 text-right">Mortalité</th>
                     <th className="py-3 px-3 text-right">Manquants</th>
@@ -137,7 +158,12 @@ export function BilanGlobalPage({ data, onOpenDetail }: BilanGlobalPageProps) {
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-sm">
                   {calculsList.map((c) => {
+                    const isClosed = c.bande.statut === 'cloturee';
                     const isGain = c.resultat >= 0;
+                    const recupDepasse =
+                      c.depensesRecupereesRatio !== null &&
+                      c.depensesRecupereesRatio > 1;
+
                     return (
                       <tr
                         key={c.bande.id}
@@ -149,28 +175,45 @@ export function BilanGlobalPage({ data, onOpenDetail }: BilanGlobalPageProps) {
                             {c.bande.nom}
                           </span>
                           <span className="text-xs text-slate-600">
-                            {c.bande.statut === 'cloturee' ? 'Clôturée' : 'En cours'} ·{' '}
+                            {isClosed ? 'Clôturée' : 'En cours'} ·{' '}
                             {formatNombre(c.joursEcoules)} j
                           </span>
                         </td>
                         <td
                           className={`py-3.5 px-3 text-right font-extrabold tabular-nums whitespace-nowrap ${
-                            isGain ? 'text-emerald-800' : 'text-red-700'
+                            isClosed
+                              ? isGain
+                                ? 'text-emerald-800'
+                                : 'text-red-700'
+                              : recupDepasse
+                              ? 'text-emerald-800'
+                              : 'text-amber-800'
                           }`}
                         >
-                          {isGain ? 'GAIN ' : 'PERTE '}
-                          {formatFCFA(c.resultat)}
+                          {isClosed ? (
+                            <>
+                              {isGain ? 'GAIN ' : 'PERTE '}
+                              {formatFCFA(c.resultat)}
+                            </>
+                          ) : (
+                            <>
+                              {formatPourcent(c.depensesRecupereesRatio, 0)}{' '}
+                              récupérés
+                            </>
+                          )}
                         </td>
                         <td
                           className={`py-3.5 px-3 text-right font-bold tabular-nums whitespace-nowrap ${
-                            c.margeMoyenneParPoulet === null
-                              ? 'text-slate-500'
+                            !isClosed || c.margeMoyenneParPoulet === null
+                              ? 'text-slate-600'
                               : c.margeMoyenneParPoulet >= 0
                               ? 'text-emerald-800'
                               : 'text-red-700'
                           }`}
                         >
-                          {formatFCFA(c.margeMoyenneParPoulet)}
+                          {isClosed
+                            ? formatFCFA(c.margeMoyenneParPoulet)
+                            : '-'}
                         </td>
                         <td className="py-3.5 px-3 text-right font-semibold text-slate-900 tabular-nums whitespace-nowrap">
                           {formatPourcent(c.tauxMortalite)}

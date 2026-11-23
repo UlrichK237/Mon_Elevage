@@ -6,17 +6,63 @@ export function getTodayISO(): string {
   return `${year}-${month}-${day}`;
 }
 
-export function offsetDaysISO(baseISO: string, deltaDays: number): string {
-  const parts = baseISO.split('-').map(Number);
+export function parseISOParts(isoDate: string): [number, number, number] | null {
+  const parts = isoDate.split('-').map(Number);
   if (parts.length !== 3 || parts.some(Number.isNaN)) {
-    return baseISO;
+    return null;
   }
-  const date = new Date(parts[0], parts[1] - 1, parts[2]);
-  date.setDate(date.getDate() + deltaDays);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return [parts[0], parts[1], parts[2]];
+}
+
+export function toISODate(year: number, month1to12: number, day: number): string {
+  const y = String(year).padStart(4, '0');
+  const m = String(month1to12).padStart(2, '0');
+  const d = String(day).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function offsetDaysISO(baseISO: string, deltaDays: number): string {
+  const parsed = parseISOParts(baseISO);
+  if (!parsed) return baseISO;
+  const utc = Date.UTC(parsed[0], parsed[1] - 1, parsed[2] + deltaDays);
+  const d = new Date(utc);
+  return toISODate(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
+}
+
+export function getDaysInMonth(year: number, month1to12: number): number {
+  return new Date(Date.UTC(year, month1to12, 0)).getUTCDate();
+}
+
+/**
+ * Retourne 0 pour Lundi ... 6 pour Dimanche (sans decalage de fuseau horaire)
+ */
+export function getWeekdayMondayFirst(
+  year: number,
+  month1to12: number,
+  day: number
+): number {
+  const jsDay = new Date(Date.UTC(year, month1to12 - 1, day)).getUTCDay(); // 0=Dim..6=Sam
+  return (jsDay + 6) % 7;
+}
+
+const MOIS_FR = [
+  'Janvier',
+  'Février',
+  'Mars',
+  'Avril',
+  'Mai',
+  'Juin',
+  'Juillet',
+  'Août',
+  'Septembre',
+  'Octobre',
+  'Novembre',
+  'Décembre',
+];
+
+export function formatMonthYearFR(year: number, month1to12: number): string {
+  const label = MOIS_FR[month1to12 - 1] || '';
+  return `${label} ${year}`;
 }
 
 export function formatDateFR(isoDate?: string): string {

@@ -14,6 +14,7 @@ interface SortieModalProps {
   onClose: () => void;
   bandeNom: string;
   effectifVivantEstime: number;
+  defaultDate?: string;
   initial?: SortieHorsVente | null;
   onSave: (data: Omit<SortieHorsVente, 'id' | 'bandeId'>) => void;
 }
@@ -25,6 +26,7 @@ export function SortieModal({
   onClose,
   bandeNom,
   effectifVivantEstime,
+  defaultDate,
   initial,
   onSave,
 }: SortieModalProps) {
@@ -45,10 +47,10 @@ export function SortieModal({
     } else {
       setMotif('consommation');
       setNombre(1);
-      setDate(getTodayISO());
+      setDate(defaultDate || getTodayISO());
       setNote('');
     }
-  }, [open, initial]);
+  }, [open, initial, defaultDate]);
 
   const maxDisponible = initial
     ? effectifVivantEstime + initial.nombre

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -11,8 +11,10 @@ import {
 import {
   AppData,
   Bande,
+  BandeDetailTab,
   CATEGORIES_DEPENSE_LABELS,
   CAUSES_MORTALITE_LABELS,
+  ComptageControle,
   Depense,
   MOTIFS_SORTIE_LABELS,
   Mortalite,
@@ -26,33 +28,41 @@ import {
   formatNombre,
   formatPourcent,
 } from '../utils/format';
-
-type DetailTab = 'resume' | 'ventes' | 'mortalite' | 'depenses' | 'aliment';
+import { BlocOuJenSuis, BlocResultatCloture } from '../components/BlocOuJenSuis';
+import { CalendrierBande } from '../components/CalendrierBande';
 
 interface BandeDetailPageProps {
   bande: Bande;
   data: AppData;
+  initialTab?: BandeDetailTab;
   onBack: () => void;
   onEditBande: (bande: Bande) => void;
   onOpenCloture: () => void;
   onReouvrirBande: () => void;
-  onAddVente: () => void;
+  onAddVente: (dateISO?: string) => void;
   onEditVente: (v: Vente) => void;
   onDeleteVente: (v: Vente) => void;
-  onAddMort: () => void;
+  onAddMort: (dateISO?: string) => void;
   onEditMort: (m: Mortalite) => void;
   onDeleteMort: (m: Mortalite) => void;
-  onAddDepense: (isAliment?: boolean) => void;
+  onAddDepense: (isAliment?: boolean, dateISO?: string) => void;
   onEditDepense: (d: Depense) => void;
   onDeleteDepense: (d: Depense) => void;
-  onAddSortie: () => void;
+  onAddSortie: (dateISO?: string) => void;
   onEditSortie: (s: SortieHorsVente) => void;
   onDeleteSortie: (s: SortieHorsVente) => void;
+  onOpenComptage: (
+    dateISO: string,
+    vivantsEstimesFinJour: number,
+    avantArrivee: boolean,
+    existing: ComptageControle | null
+  ) => void;
 }
 
 export function BandeDetailPage({
   bande,
   data,
+  initialTab = 'resume',
   onBack,
   onEditBande,
   onOpenCloture,
@@ -69,8 +79,13 @@ export function BandeDetailPage({
   onAddSortie,
   onEditSortie,
   onDeleteSortie,
+  onOpenComptage,
 }: BandeDetailPageProps) {
-  const [tab, setTab] = useState<DetailTab>('resume');
+  const [tab, setTab] = useState<BandeDetailTab>(initialTab);
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab, bande.id]);
 
   const calculs = useMemo(
     () =>
@@ -135,8 +150,9 @@ export function BandeDetailPage({
     [data.sortiesHorsVente, bande.id]
   );
 
-  const tabs: Array<{ id: DetailTab; label: string }> = [
+  const tabs: Array<{ id: BandeDetailTab; label: string }> = [
     { id: 'resume', label: 'Résumé' },
+    { id: 'calendrier', label: 'Calendrier' },
     { id: 'ventes', label: `Ventes (${ventes.length})` },
     { id: 'mortalite', label: `Mortalité (${mortalites.length})` },
     { id: 'depenses', label: `Dépenses (${depensesToutes.length})` },
@@ -232,44 +248,19 @@ export function BandeDetailPage({
       {/* ONGLET RESUME */}
       {tab === 'resume' && (
         <div className="space-y-4">
-          {/* Resultat */}
-          <section
-            className={`rounded-3xl border p-5 ${
-              calculs.resultat >= 0
-                ? 'bg-emerald-50 border-emerald-200'
-                : 'bg-red-50 border-red-200'
-            }`}
-          >
-            <p
-              className={`text-sm font-bold ${
-                calculs.resultat >= 0 ? 'text-emerald-900' : 'text-red-900'
-              }`}
-            >
-              {calculs.resultat >= 0 ? 'GAIN' : 'PERTE'}{' '}
-              {calculs.resultatEstProvisoire ? '(provisoire)' : '(définitif)'}
-            </p>
-            <p
-              className={`text-4xl font-extrabold tabular-nums mt-1 ${
-                calculs.resultat >= 0 ? 'text-emerald-800' : 'text-red-800'
-              }`}
-            >
-              {formatFCFA(calculs.resultat)}
-            </p>
-            <p className="text-sm font-medium text-slate-800 mt-2 tabular-nums">
-              Résultat de trésorerie (encaissé − charges) :{' '}
-              <span className="font-bold">
-                {formatFCFA(calculs.resultatTresorerie)}
-              </span>
-            </p>
-          </section>
+          {isClosed ? (
+            <BlocResultatCloture calculs={calculs} />
+          ) : (
+            <BlocOuJenSuis calculs={calculs} />
+          )}
 
-          {calculs.prixMinimumCouvrirCharges !== null && (
-            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950">
+          {!isClosed && calculs.prixMinimumCouvrirDepenses !== null && (
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950">
               <p className="text-sm font-bold">
-                Prix minimum pour couvrir vos charges sur les{' '}
+                Prix minimum pour couvrir vos dépenses sur les{' '}
                 {formatNombre(calculs.effectifVivantEstime)} poulets restants :{' '}
                 <span className="tabular-nums underline">
-                  {formatFCFA(calculs.prixMinimumCouvrirCharges)} / poulet
+                  {formatFCFA(calculs.prixMinimumCouvrirDepenses)} / poulet
                 </span>
               </p>
             </div>
@@ -327,7 +318,7 @@ export function BandeDetailPage({
           {/* Chiffre d'affaires & Prix unitaires */}
           <section className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
             <h2 className="text-lg font-bold text-slate-950">
-              Ventes et rentabilité par poulet
+              Ventes et prix moyens
             </h2>
             <dl className="divide-y divide-slate-100 text-base">
               <LigneStat
@@ -352,18 +343,20 @@ export function BandeDetailPage({
                 label="Prix de vente moyen global"
                 valeur={formatFCFA(calculs.prixVenteMoyenGlobal)}
               />
-              <LigneStat
-                label="Marge moyenne par poulet"
-                valeur={formatFCFA(calculs.margeMoyenneParPoulet)}
-                tone={
-                  calculs.margeMoyenneParPoulet !== null
-                    ? calculs.margeMoyenneParPoulet >= 0
-                      ? 'green'
-                      : 'red'
-                    : 'neutral'
-                }
-                gras
-              />
+              {isClosed && (
+                <LigneStat
+                  label="Marge moyenne par poulet"
+                  valeur={formatFCFA(calculs.margeMoyenneParPoulet)}
+                  tone={
+                    calculs.margeMoyenneParPoulet !== null
+                      ? calculs.margeMoyenneParPoulet >= 0
+                        ? 'green'
+                        : 'red'
+                      : 'neutral'
+                  }
+                  gras
+                />
+              )}
             </dl>
 
             <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -390,10 +383,10 @@ export function BandeDetailPage({
             </div>
           </section>
 
-          {/* Charges & Aliment */}
+          {/* Depenses totales & Aliment */}
           <section className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
             <h2 className="text-lg font-bold text-slate-950">
-              Charges et aliment
+              Dépenses et aliment
             </h2>
             <dl className="divide-y divide-slate-100 text-base">
               <LigneStat
@@ -409,13 +402,13 @@ export function BandeDetailPage({
                 valeur={formatFCFA(calculs.depensesHorsAliment)}
               />
               <LigneStat
-                label="Charges totales"
-                valeur={formatFCFA(calculs.chargesTotales)}
+                label="Dépenses totales"
+                valeur={formatFCFA(calculs.depensesTotales)}
                 gras
               />
               <LigneStat
-                label="Part de l’aliment dans les charges"
-                valeur={formatPourcent(calculs.partAlimentDansCharges)}
+                label="Part de l’aliment dans les dépenses"
+                valeur={formatPourcent(calculs.partAlimentDansDepenses)}
               />
               <LigneStat
                 label="Sacs consommés / achetés"
@@ -443,7 +436,7 @@ export function BandeDetailPage({
               {!isClosed && (
                 <button
                   type="button"
-                  onClick={onAddSortie}
+                  onClick={() => onAddSortie()}
                   className="min-h-[44px] px-3 rounded-xl bg-slate-900 text-white text-sm font-bold flex items-center gap-1 hover:bg-slate-800"
                 >
                   <Plus className="w-4 h-4" />
@@ -493,6 +486,28 @@ export function BandeDetailPage({
         </div>
       )}
 
+      {/* ONGLET CALENDRIER */}
+      {tab === 'calendrier' && (
+        <CalendrierBande
+          bande={bande}
+          calculs={calculs}
+          data={data}
+          onAddMortDate={(dateISO) => onAddMort(dateISO)}
+          onEditMort={onEditMort}
+          onDeleteMort={onDeleteMort}
+          onAddVenteDate={(dateISO) => onAddVente(dateISO)}
+          onEditVente={onEditVente}
+          onDeleteVente={onDeleteVente}
+          onAddDepenseDate={(dateISO) => onAddDepense(false, dateISO)}
+          onEditDepense={onEditDepense}
+          onDeleteDepense={onDeleteDepense}
+          onAddSortieDate={(dateISO) => onAddSortie(dateISO)}
+          onEditSortie={onEditSortie}
+          onDeleteSortie={onDeleteSortie}
+          onOpenComptage={onOpenComptage}
+        />
+      )}
+
       {/* ONGLET VENTES */}
       {tab === 'ventes' && (
         <section className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
@@ -503,7 +518,7 @@ export function BandeDetailPage({
             {!isClosed && (
               <button
                 type="button"
-                onClick={onAddVente}
+                onClick={() => onAddVente()}
                 className="min-h-[48px] px-4 rounded-xl bg-emerald-800 text-white text-sm font-bold flex items-center gap-1.5 hover:bg-emerald-900"
               >
                 <Plus className="w-4 h-4" />
@@ -566,7 +581,7 @@ export function BandeDetailPage({
             {!isClosed && (
               <button
                 type="button"
-                onClick={onAddMort}
+                onClick={() => onAddMort()}
                 className="min-h-[48px] px-4 rounded-xl bg-red-700 text-white text-sm font-bold flex items-center gap-1.5 hover:bg-red-800"
               >
                 <Plus className="w-4 h-4" />
@@ -586,7 +601,7 @@ export function BandeDetailPage({
                   className="py-3.5 flex items-center justify-between gap-3"
                 >
                   <div className="min-w-0">
-                    <p className="text-base font-bold text-red-800 tabular-nums">
+                    <p className="text-base font-bold text-slate-950 tabular-nums">
                       {formatNombre(m.nombre)} mort{m.nombre > 1 ? 's' : ''}
                     </p>
                     <p className="text-sm text-slate-600">
@@ -712,8 +727,8 @@ export function BandeDetailPage({
                 gras
               />
               <LigneStat
-                label="Part de l’aliment dans les charges"
-                valeur={formatPourcent(calculs.partAlimentDansCharges)}
+                label="Part de l’aliment dans les dépenses"
+                valeur={formatPourcent(calculs.partAlimentDansDepenses)}
               />
               <LigneStat
                 label="Quantité par poulet reçu"

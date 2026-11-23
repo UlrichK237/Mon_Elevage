@@ -1,5 +1,6 @@
 import {
   AppData,
+  Bande,
   CATEGORIES_DEPENSE_LABELS,
   CAUSES_MORTALITE_LABELS,
   MOTIFS_SORTIE_LABELS,
@@ -26,6 +27,7 @@ export function creerDonneesVides(): AppData {
     paiementsDette: [],
     sortiesHorsVente: [],
     depenses: [],
+    comptagesControle: [],
   };
 }
 
@@ -50,6 +52,21 @@ export function sauvegarderDonnees(data: AppData): void {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
 
+function migrerBande(raw: Record<string, unknown>): Bande {
+  const b = raw as unknown as Bande;
+  return {
+    ...b,
+    dureePrevueJours:
+      typeof raw.dureePrevueJours === 'number' && raw.dureePrevueJours > 0
+        ? raw.dureePrevueJours
+        : 28,
+    prixVentePrevu:
+      typeof raw.prixVentePrevu === 'number' && raw.prixVentePrevu > 0
+        ? raw.prixVentePrevu
+        : undefined,
+  };
+}
+
 export function validerEtNormaliserDonnees(input: unknown): AppData {
   if (!input || typeof input !== 'object') {
     throw new Error('Fichier de sauvegarde invalide.');
@@ -69,16 +86,26 @@ export function validerEtNormaliserDonnees(input: unknown): AppData {
     throw new Error('Structure de sauvegarde incomplète.');
   }
 
+  // Migration douce depuis schemaVersion 1 -> 2
+  const bandes = obj.bandes.map((item) =>
+    migrerBande((item || {}) as Record<string, unknown>)
+  );
+
+  const comptagesControle = Array.isArray(obj.comptagesControle)
+    ? (obj.comptagesControle as AppData['comptagesControle'])
+    : [];
+
   return {
     schemaVersion: SCHEMA_VERSION,
     lastBackupDate:
       typeof obj.lastBackupDate === 'string' ? obj.lastBackupDate : undefined,
-    bandes: obj.bandes as AppData['bandes'],
+    bandes,
     mortalites: obj.mortalites as AppData['mortalites'],
     ventes: obj.ventes as AppData['ventes'],
     paiementsDette: obj.paiementsDette as AppData['paiementsDette'],
     sortiesHorsVente: obj.sortiesHorsVente as AppData['sortiesHorsVente'],
     depenses: obj.depenses as AppData['depenses'],
+    comptagesControle,
   };
 }
 
@@ -100,12 +127,14 @@ export function creerDonneesDemo(): AppData {
         id: 'bande_demo_1',
         nom: 'Bande 11 - novembre',
         dateArrivee: b1Arrivee,
+        dureePrevueJours: 28,
         nbRecus: 550,
         coutAchatTotal: 302500,
+        prixVentePrevu: 2900,
         fournisseur: 'Couvoir de Bafoussam',
         statut: 'cloturee',
         dateCloture: b1Cloture,
-        nbCompteFinal: 0, // tous vendus/sortis, reste 3 manquants inexpliques
+        nbCompteFinal: 0,
         sacsRestantsFinal: 2,
         notes: 'Bonne croissance dans l’ensemble. 3 poulets manquants au comptage final.',
       },
@@ -113,15 +142,16 @@ export function creerDonneesDemo(): AppData {
         id: 'bande_demo_2',
         nom: 'Bande 12 - décembre',
         dateArrivee: b2Arrivee,
+        dureePrevueJours: 28,
         nbRecus: 600,
         coutAchatTotal: 330000,
+        prixVentePrevu: 3000,
         fournisseur: 'Couvoir de Bafoussam',
         statut: 'en_cours',
         notes: 'Poussins vigoureux à l’arrivée.',
       },
     ],
     mortalites: [
-      // Bande 1: 14 morts
       {
         id: 'mort_demo_1',
         bandeId: 'bande_demo_1',
@@ -144,7 +174,6 @@ export function creerDonneesDemo(): AppData {
         nombre: 3,
         cause: 'inconnue',
       },
-      // Bande 2: 11 morts
       {
         id: 'mort_demo_4',
         bandeId: 'bande_demo_2',
@@ -162,7 +191,6 @@ export function creerDonneesDemo(): AppData {
       },
     ],
     sortiesHorsVente: [
-      // Bande 1: 8 sorties hors vente -> 550 - 14 - 8 - 525 vendus = 3 estime vs 0 compte = 3 manquants
       {
         id: 'sortie_demo_1',
         bandeId: 'bande_demo_1',
@@ -178,7 +206,6 @@ export function creerDonneesDemo(): AppData {
         motif: 'don',
         note: 'Pour les voisins qui ont aidé au déchargement',
       },
-      // Bande 2: 4 sorties
       {
         id: 'sortie_demo_3',
         bandeId: 'bande_demo_2',
@@ -188,7 +215,6 @@ export function creerDonneesDemo(): AppData {
       },
     ],
     ventes: [
-      // Bande 1: 525 vendus (400 gros + 125 detail)
       {
         id: 'vente_demo_1',
         bandeId: 'bande_demo_1',
@@ -223,7 +249,6 @@ export function creerDonneesDemo(): AppData {
         montantEncaisse: 400000,
         client: 'Clients du quartier',
       },
-      // Bande 2: 120 vendus en debut de vente
       {
         id: 'vente_demo_4',
         bandeId: 'bande_demo_2',
@@ -257,7 +282,6 @@ export function creerDonneesDemo(): AppData {
       },
     ],
     depenses: [
-      // Bande 1 aliment: 45 sacs achetes, 2 restants -> 43 consommes
       {
         id: 'dep_demo_1',
         bandeId: 'bande_demo_1',
@@ -309,7 +333,6 @@ export function creerDonneesDemo(): AppData {
         categorie: 'eau_electricite',
         montant: 12000,
       },
-      // Bande 2 aliment & depenses en cours
       {
         id: 'dep_demo_7',
         bandeId: 'bande_demo_2',
@@ -353,6 +376,14 @@ export function creerDonneesDemo(): AppData {
         montant: 14000,
       },
     ],
+    comptagesControle: [
+      {
+        id: 'compt_demo_1',
+        bandeId: 'bande_demo_2',
+        date: offsetDaysISO(today, -3),
+        nombreCompte: 583,
+      },
+    ],
   };
 }
 
@@ -381,6 +412,7 @@ export function genererCSVBande(bandeId: string, data: AppData): string {
   lines.push(['RÉSUMÉ DE LA BANDE', bande.nom].map(escapeCSV).join(';'));
   lines.push(['Statut', bande.statut === 'cloturee' ? 'Clôturée' : 'En cours'].map(escapeCSV).join(';'));
   lines.push(['Date d’arrivée', formatDateFR(bande.dateArrivee)].map(escapeCSV).join(';'));
+  lines.push(['Fin prévue', formatDateFR(c.dateFinPrevue)].map(escapeCSV).join(';'));
   if (bande.dateCloture) {
     lines.push(['Date de clôture', formatDateFR(bande.dateCloture)].map(escapeCSV).join(';'));
   }
@@ -399,7 +431,7 @@ export function genererCSVBande(bandeId: string, data: AppData): string {
   lines.push(['Chiffre d’affaires', formatFCFA(c.chiffreAffaires)].map(escapeCSV).join(';'));
   lines.push(['Montant encaissé', formatFCFA(c.encaisseTotal)].map(escapeCSV).join(';'));
   lines.push(['Créances restantes', formatFCFA(c.creances)].map(escapeCSV).join(';'));
-  lines.push(['Charges totales', formatFCFA(c.chargesTotales)].map(escapeCSV).join(';'));
+  lines.push(['Dépenses totales', formatFCFA(c.depensesTotales)].map(escapeCSV).join(';'));
   lines.push(['Résultat', formatFCFA(c.resultat)].map(escapeCSV).join(';'));
   lines.push(['Sacs achetés (50 kg)', c.sacsAchetes].map(escapeCSV).join(';'));
   lines.push(['Sacs consommés', c.sacsConsommes].map(escapeCSV).join(';'));

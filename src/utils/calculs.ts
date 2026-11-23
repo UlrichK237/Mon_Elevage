@@ -1,13 +1,16 @@
 import {
   AppData,
   Bande,
+  CATEGORIES_DEPENSE_LABELS,
+  CategorieDepense,
+  ComptageControle,
   Depense,
   Mortalite,
   PaiementDette,
   SortieHorsVente,
   Vente,
 } from '../types/elevage';
-import { getTodayISO } from './format';
+import { getTodayISO, offsetDaysISO, parseISOParts } from './format';
 
 export interface RepartitionVente {
   nombre: number;
@@ -15,9 +18,19 @@ export interface RepartitionVente {
   prixMoyen: number | null;
 }
 
+export interface PosteDepenseLourd {
+  cle: string;
+  label: string;
+  montant: number;
+  part: number; // 0..1
+}
+
 export interface CalculsBande {
   bande: Bande;
   joursEcoules: number;
+  dureePrevueJours: number;
+  dateFinPrevue: string;
+  joursRestantsJusquaFinPrevue: number; // positif = dans N jours, negatif = N jours apres
   // 1. Effectifs
   nbRecus: number;
   totalMorts: number;
@@ -43,22 +56,28 @@ export interface CalculsBande {
   montantAlimentAchete: number;
   prixMoyenPondereSac: number | null;
   coutAlimentConsomme: number;
-  partAlimentDansCharges: number | null;
+  partAlimentDansDepenses: number | null;
   kgAlimentParPouletRecu: number | null;
-  // 6. Charges
+  // 6. Depenses totales (achat poussins + depenses hors aliment + aliment consomme)
   coutAchatPoussins: number;
   depensesHorsAliment: number;
-  chargesTotales: number;
-  // 7. Resultat
+  depensesTotales: number;
+  top3PostesDepenses: PosteDepenseLourd[];
+  // 7. Resultat & Suivi "Ou j'en suis"
   resultat: number;
   resultatEstProvisoire: boolean;
   resultatTresorerie: number;
+  depensesRecupereesRatio: number | null; // encaisseTotal / depensesTotales
+  resteARecuperer: number; // max(0, depensesTotales - encaisseTotal)
+  beneficeEnCours: number; // max(0, encaisseTotal - depensesTotales)
+  prixReferencePrevision: number | null;
+  resultatPrevisionnel: number | null;
   // 8. Unitaires & Marges
   prixRevientParPouletVendu: number | null;
   prixVenteMoyenGlobal: number | null;
   margeMoyenneParPoulet: number | null;
   // 9. Seuil de rentabilite
-  prixMinimumCouvrirCharges: number | null;
+  prixMinimumCouvrirDepenses: number | null;
   // 10. Repartition gros / detail
   repartitionGros: RepartitionVente;
   repartitionDetail: RepartitionVente;
@@ -79,35 +98,46 @@ export interface CreanceClient {
 }
 
 export interface TotauxGlobaux {
-  nbBandes: number;
-  nbBandesEnCours: number;
   nbBandesCloturees: number;
   totalPouletsRecus: number;
   totalPouletsVendus: number;
   totalPouletsMorts: number;
   totalManquants: number;
   totalChiffreAffaires: number;
-  totalCharges: number;
+  totalDepenses: number;
   totalResultat: number;
   totalEncaisse: number;
-  totalCreances: number;
+  totalCreancesEnCoursToutesBandes: number;
 }
 
-export function calculerJoursEntre(dateDebutISO: string, dateFinISO: string): number {
-  const debutParts = dateDebutISO.split('-').map(Number);
-  const finParts = dateFinISO.split('-').map(Number);
-  if (
-    debutParts.length !== 3 ||
-    finParts.length !== 3 ||
-    debutParts.some(Number.isNaN) ||
-    finParts.some(Number.isNaN)
-  ) {
+export interface ResumeJourBande {
+  date: string;
+  morts: Mortalite[];
+  ventes: Vente[];
+  depenses: Depense[];
+  sorties: SortieHorsVente[];
+  paiements: PaiementDette[];
+  pouletsVendusJour: number;
+  argentRentreJour: number;
+  avantArrivee: boolean;
+  vivantsEstimesFinJour: number;
+  comptageControle: ComptageControle | null;
+  ecartComptage: number | null; // vivantsEstimesFinJour - nombreCompte
+}
+
+export function calculerJoursDifference(dateDebutISO: string, dateFinISO: string): number {
+  const debutParts = parseISOParts(dateDebutISO);
+  const finParts = parseISOParts(dateFinISO);
+  if (!debutParts || !finParts) {
     return 0;
   }
   const debut = Date.UTC(debutParts[0], debutParts[1] - 1, debutParts[2]);
   const fin = Date.UTC(finParts[0], finParts[1] - 1, finParts[2]);
-  const diff = Math.round((fin - debut) / (1000 * 60 * 60 * 24));
-  return Math.max(0, diff);
+  return Math.round((fin - debut) / (1000 * 60 * 60 * 24));
+}
+
+export function calculerJoursEntre(dateDebutISO: string, dateFinISO: string): number {
+  return Math.max(0, calculerJoursDifference(dateDebutISO, dateFinISO));
 }
 
 export function calculerResteDuVente(
@@ -138,6 +168,16 @@ export function calculerBande(
   const venteIds = new Set(bandeVentes.map((v) => v.id));
   const bandePaiements = paiementsDette.filter((p) => venteIds.has(p.venteId));
 
+  const dureePrevueJours =
+    bande.dureePrevueJours && bande.dureePrevueJours > 0
+      ? bande.dureePrevueJours
+      : 28;
+  const dateFinPrevue = offsetDaysISO(bande.dateArrivee, dureePrevueJours);
+  const joursRestantsJusquaFinPrevue = calculerJoursDifference(
+    dateReferenceISO,
+    dateFinPrevue
+  );
+
   // 11. Jours ecoules
   const dateFin =
     bande.statut === 'cloturee' && bande.dateCloture
@@ -161,7 +201,7 @@ export function calculerBande(
   const encaisseVentes = bandeVentes.reduce((sum, v) => sum + v.montantEncaisse, 0);
   const encaissePaiements = bandePaiements.reduce((sum, p) => sum + p.montant, 0);
   const encaisseTotal = encaisseVentes + encaissePaiements;
-  const creances = chiffreAffaires - encaisseTotal;
+  const creances = Math.max(0, chiffreAffaires - encaisseTotal);
 
   // 10. Repartition gros / detail
   const ventesGros = bandeVentes.filter((v) => v.type === 'gros');
@@ -221,39 +261,95 @@ export function calculerBande(
 
   const kgAlimentParPouletRecu = nbRecus > 0 ? kgConsommes / nbRecus : null;
 
-  // 6. Charges totales
+  // 6. Depenses totales (achat poussins + depenses hors aliment + aliment consomme)
   const coutAchatPoussins = bande.coutAchatTotal;
   const depensesHorsAliment = bandeDepenses
     .filter((d) => d.categorie !== 'aliment')
     .reduce((sum, d) => sum + d.montant, 0);
-  const chargesTotales =
+  const depensesTotales =
     coutAchatPoussins + depensesHorsAliment + coutAlimentConsomme;
 
-  const partAlimentDansCharges =
-    chargesTotales > 0 ? coutAlimentConsomme / chargesTotales : null;
+  const partAlimentDansDepenses =
+    depensesTotales > 0 ? coutAlimentConsomme / depensesTotales : null;
 
-  // 7. Resultat
-  const resultat = chiffreAffaires - chargesTotales;
+  // Top 3 postes de depenses
+  const postesMap = new Map<string, { label: string; montant: number }>();
+  if (coutAchatPoussins > 0) {
+    postesMap.set('achat_poussins', {
+      label: 'Achat des poussins',
+      montant: coutAchatPoussins,
+    });
+  }
+  if (coutAlimentConsomme > 0) {
+    postesMap.set('aliment', {
+      label: 'Aliment consommé',
+      montant: coutAlimentConsomme,
+    });
+  }
+  for (const d of bandeDepenses) {
+    if (d.categorie === 'aliment') continue;
+    const prev = postesMap.get(d.categorie) || {
+      label: CATEGORIES_DEPENSE_LABELS[d.categorie as CategorieDepense],
+      montant: 0,
+    };
+    prev.montant += d.montant;
+    postesMap.set(d.categorie, prev);
+  }
+  const top3PostesDepenses: PosteDepenseLourd[] = Array.from(postesMap.entries())
+    .map(([cle, info]) => ({
+      cle,
+      label: info.label,
+      montant: info.montant,
+      part: depensesTotales > 0 ? info.montant / depensesTotales : 0,
+    }))
+    .filter((p) => p.montant > 0)
+    .sort((a, b) => b.montant - a.montant)
+    .slice(0, 3);
+
+  // 7. Resultat & "Ou j'en suis"
+  const resultat = chiffreAffaires - depensesTotales;
   const resultatEstProvisoire = bande.statut !== 'cloturee';
-  const resultatTresorerie = encaisseTotal - chargesTotales;
+  const resultatTresorerie = encaisseTotal - depensesTotales;
+
+  const depensesRecupereesRatio =
+    depensesTotales > 0 ? encaisseTotal / depensesTotales : null;
+  const resteARecuperer = Math.max(0, depensesTotales - encaisseTotal);
+  const beneficeEnCours = Math.max(0, encaisseTotal - depensesTotales);
+
+  const prixReferencePrevision =
+    prixVenteMoyenGlobal !== null && prixVenteMoyenGlobal > 0
+      ? prixVenteMoyenGlobal
+      : bande.prixVentePrevu && bande.prixVentePrevu > 0
+      ? bande.prixVentePrevu
+      : null;
+
+  const resultatPrevisionnel =
+    prixReferencePrevision !== null
+      ? chiffreAffaires +
+        Math.max(0, effectifVivantEstime) * prixReferencePrevision -
+        depensesTotales
+      : null;
 
   // 8. Prix de revient et marge
   const prixRevientParPouletVendu =
-    totalVendus > 0 ? chargesTotales / totalVendus : null;
+    totalVendus > 0 ? depensesTotales / totalVendus : null;
   const margeMoyenneParPoulet =
     prixVenteMoyenGlobal !== null && prixRevientParPouletVendu !== null
       ? prixVenteMoyenGlobal - prixRevientParPouletVendu
       : null;
 
   // 9. Seuil de rentabilite
-  const prixMinimumCouvrirCharges =
+  const prixMinimumCouvrirDepenses =
     effectifVivantEstime > 0 && resultat < 0
-      ? (chargesTotales - chiffreAffaires) / effectifVivantEstime
+      ? (depensesTotales - chiffreAffaires) / effectifVivantEstime
       : null;
 
   return {
     bande,
     joursEcoules,
+    dureePrevueJours,
+    dateFinPrevue,
+    joursRestantsJusquaFinPrevue,
     nbRecus,
     totalMorts,
     totalVendus,
@@ -274,18 +370,24 @@ export function calculerBande(
     montantAlimentAchete,
     prixMoyenPondereSac,
     coutAlimentConsomme,
-    partAlimentDansCharges,
+    partAlimentDansDepenses,
     kgAlimentParPouletRecu,
     coutAchatPoussins,
     depensesHorsAliment,
-    chargesTotales,
+    depensesTotales,
+    top3PostesDepenses,
     resultat,
     resultatEstProvisoire,
     resultatTresorerie,
+    depensesRecupereesRatio,
+    resteARecuperer,
+    beneficeEnCours,
+    prixReferencePrevision,
+    resultatPrevisionnel,
     prixRevientParPouletVendu,
     prixVenteMoyenGlobal,
     margeMoyenneParPoulet,
-    prixMinimumCouvrirCharges,
+    prixMinimumCouvrirDepenses,
     repartitionGros,
     repartitionDetail,
   };
@@ -349,39 +451,119 @@ export function calculerCreancesParClient(data: AppData): {
   return { clients, totalCreances };
 }
 
+/**
+ * Les totaux globaux ne comptent QUE les bandes cloturees.
+ * Les creances en cours restent indiquees sur l'ensemble des ventes non reglees.
+ */
 export function calculerTotauxGlobaux(calculsList: CalculsBande[]): TotauxGlobaux {
-  return calculsList.reduce<TotauxGlobaux>(
+  const cloturees = calculsList.filter((c) => c.bande.statut === 'cloturee');
+  const totalCreancesEnCoursToutesBandes = calculsList.reduce(
+    (sum, c) => sum + c.creances,
+    0
+  );
+
+  const base = cloturees.reduce(
     (acc, c) => ({
-      nbBandes: acc.nbBandes + 1,
-      nbBandesEnCours:
-        acc.nbBandesEnCours + (c.bande.statut === 'en_cours' ? 1 : 0),
-      nbBandesCloturees:
-        acc.nbBandesCloturees + (c.bande.statut === 'cloturee' ? 1 : 0),
+      nbBandesCloturees: acc.nbBandesCloturees + 1,
       totalPouletsRecus: acc.totalPouletsRecus + c.nbRecus,
       totalPouletsVendus: acc.totalPouletsVendus + c.totalVendus,
       totalPouletsMorts: acc.totalPouletsMorts + c.totalMorts,
       totalManquants: acc.totalManquants + (c.manquants ?? 0),
       totalChiffreAffaires: acc.totalChiffreAffaires + c.chiffreAffaires,
-      totalCharges: acc.totalCharges + c.chargesTotales,
+      totalDepenses: acc.totalDepenses + c.depensesTotales,
       totalResultat: acc.totalResultat + c.resultat,
       totalEncaisse: acc.totalEncaisse + c.encaisseTotal,
-      totalCreances: acc.totalCreances + c.creances,
     }),
     {
-      nbBandes: 0,
-      nbBandesEnCours: 0,
       nbBandesCloturees: 0,
       totalPouletsRecus: 0,
       totalPouletsVendus: 0,
       totalPouletsMorts: 0,
       totalManquants: 0,
       totalChiffreAffaires: 0,
-      totalCharges: 0,
+      totalDepenses: 0,
       totalResultat: 0,
       totalEncaisse: 0,
-      totalCreances: 0,
     }
   );
+
+  return {
+    ...base,
+    totalCreancesEnCoursToutesBandes,
+  };
+}
+
+export function calculerJourBande(
+  bande: Bande,
+  data: AppData,
+  dateISO: string
+): ResumeJourBande {
+  const morts = data.mortalites.filter(
+    (m) => m.bandeId === bande.id && m.date === dateISO
+  );
+  const ventes = data.ventes.filter(
+    (v) => v.bandeId === bande.id && v.date === dateISO
+  );
+  const depenses = data.depenses.filter(
+    (d) => d.bandeId === bande.id && d.date === dateISO
+  );
+  const sorties = data.sortiesHorsVente.filter(
+    (s) => s.bandeId === bande.id && s.date === dateISO
+  );
+
+  const venteIdsBande = new Set(
+    data.ventes.filter((v) => v.bandeId === bande.id).map((v) => v.id)
+  );
+  const paiements = data.paiementsDette.filter(
+    (p) => venteIdsBande.has(p.venteId) && p.date === dateISO
+  );
+
+  const pouletsVendusJour = ventes.reduce((sum, v) => sum + v.nombre, 0);
+  const argentRentreJour =
+    ventes.reduce((sum, v) => sum + v.montantEncaisse, 0) +
+    paiements.reduce((sum, p) => sum + p.montant, 0);
+
+  const avantArrivee = dateISO < bande.dateArrivee;
+
+  let vivantsEstimesFinJour = 0;
+  if (!avantArrivee) {
+    const mortsCumul = data.mortalites
+      .filter((m) => m.bandeId === bande.id && m.date <= dateISO)
+      .reduce((sum, m) => sum + m.nombre, 0);
+    const vendusCumul = data.ventes
+      .filter((v) => v.bandeId === bande.id && v.date <= dateISO)
+      .reduce((sum, v) => sum + v.nombre, 0);
+    const sortiesCumul = data.sortiesHorsVente
+      .filter((s) => s.bandeId === bande.id && s.date <= dateISO)
+      .reduce((sum, s) => sum + s.nombre, 0);
+    vivantsEstimesFinJour =
+      bande.nbRecus - mortsCumul - vendusCumul - sortiesCumul;
+  }
+
+  const comptageControle =
+    data.comptagesControle.find(
+      (c) => c.bandeId === bande.id && c.date === dateISO
+    ) || null;
+
+  const ecartComptage =
+    comptageControle && !avantArrivee
+      ? vivantsEstimesFinJour - comptageControle.nombreCompte
+      : null;
+
+  return {
+    date: dateISO,
+    morts,
+    ventes,
+    depenses,
+    sorties,
+    paiements,
+    pouletsVendusJour,
+    argentRentreJour,
+    avantArrivee,
+    vivantsEstimesFinJour,
+    comptageControle,
+    ecartComptage,
+  };
 }
 
 export function doitRappelerSauvegarde(
